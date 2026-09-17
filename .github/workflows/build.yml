@@ -1,0 +1,94 @@
+name: Build Android, iOS and Web
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  android-web:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Flutter kurulumu
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Platform dosyalarını oluştur
+        run: flutter create --project-name fis_toplama --org com.fistoplama --platforms=android,web .
+
+      - name: Paketleri indir
+        run: flutter pub get
+
+      - name: Android APK oluştur
+        run: flutter build apk --release
+
+      - name: Web sürümünü oluştur
+        run: flutter build web --release --base-href "/${{ github.event.repository.name }}/"
+
+      - name: APK artifact yükle
+        uses: actions/upload-artifact@v4
+        with:
+          name: FisToplama-Android-APK
+          path: build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Web artifact yükle
+        uses: actions/upload-artifact@v4
+        with:
+          name: FisToplama-Web
+          path: build/web
+
+      - name: GitHub Pages artifact hazırla
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/web
+
+  deploy-web:
+    needs: android-web
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: GitHub Pages'e yayınla
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+  ios:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Flutter kurulumu
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: iOS platformunu oluştur
+        run: flutter create --project-name fis_toplama --org com.fistoplama --platforms=ios .
+
+      - name: Paketleri indir
+        run: flutter pub get
+
+      - name: iOS uygulamasını imzasız derle
+        run: flutter build ios --release --no-codesign
+
+      - name: iOS uygulamasını paketle
+        run: ditto -c -k --sequesterRsrc --keepParent build/ios/iphoneos/Runner.app FisToplama-iOS-Unsigned.zip
+
+      - name: iOS artifact yükle
+        uses: actions/upload-artifact@v4
+        with:
+          name: FisToplama-iOS-Unsigned
+          path: FisToplama-iOS-Unsigned.zip
